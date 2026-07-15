@@ -1,5 +1,6 @@
 using System.Text.Json;
 using k8s;
+using k8s.Autorest;
 using k8s.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -20,12 +21,14 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
     private readonly ILogger<KubernetesPlatformGateway> logger;
     private readonly Vertex.Infrastructure.Persistence.VertexDbContext db;
     private readonly IKubernetes? client;
+    private readonly KubernetesMetricsReader metricsReader;
 
-    public KubernetesPlatformGateway(IOptions<KubernetesOptions> options, ILogger<KubernetesPlatformGateway> logger, Vertex.Infrastructure.Persistence.VertexDbContext db)
+    public KubernetesPlatformGateway(IOptions<KubernetesOptions> options, ILogger<KubernetesPlatformGateway> logger, Vertex.Infrastructure.Persistence.VertexDbContext db, KubernetesMetricsReader metricsReader)
     {
         settings = options.Value;
         this.logger = logger;
         this.db = db;
+        this.metricsReader = metricsReader;
         client = settings.Mode.Equals("Cluster", StringComparison.OrdinalIgnoreCase)
             ? new k8s.Kubernetes(KubernetesClientConfiguration.BuildDefaultConfig())
             : null;
@@ -38,11 +41,17 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
             var deployments = await client.AppsV1.ListDeploymentForAllNamespacesAsync(cancellationToken: cancellationToken);
             var namespaces = await client.CoreV1.ListNamespaceAsync(cancellationToken: cancellationToken);
             var nodes = await client.CoreV1.ListNodeAsync(cancellationToken: cancellationToken);
+            var pods = await client.CoreV1.ListPodForAllNamespacesAsync(cancellationToken: cancellationToken);
+            var storageClasses = await client.StorageV1.ListStorageClassAsync(cancellationToken: cancellationToken);
+            var ingressClasses = await client.NetworkingV1.ListIngressClassAsync(cancellationToken: cancellationToken);
+            var version = await client.Version.GetCodeAsync(cancellationToken);
+            var clusterEvents = await ReadClusterEventsAsync(cancellationToken);
+            var metrics = await metricsReader.ReadAsync(client, nodes.Items.ToArray(), cancellationToken);
             return new DashboardResponse(
-                new ClusterSummary("Connected", "Kubernetes API", namespaces.Items.Count, 0, 0),
-                new ResourceSummary(deployments.Items.Sum(x => x.Status?.AvailableReplicas ?? 0), deployments.Items.Count, nodes.Items.Count, 0, 0),
-                nodes.Items.Select(x => new NodeSummary(x.Metadata?.Name ?? "unknown", x.Status?.Conditions?.Any(c => c.Type == "Ready" && c.Status == "True") == true ? "Ready" : "NotReady", "—", "—", x.Metadata?.Labels?.ContainsKey("node-role.kubernetes.io/control-plane") == true ? "control-plane" : "worker")).ToArray(),
-                Array.Empty<EventSummary>());
+                new ClusterSummary("Connected", version.GitVersion ?? $"v{version.Major}.{version.Minor}", namespaces.Items.Count, storageClasses.Items.Count, ingressClasses.Items.Count),
+                new ResourceSummary(pods.Items.Count(x => string.Equals(x.Status?.Phase, "Running", StringComparison.OrdinalIgnoreCase)), deployments.Items.Count(x => (x.Status?.AvailableReplicas ?? 0) > 0), nodes.Items.Count, metrics.CpuUsagePercent, metrics.MemoryUsagePercent),
+                nodes.Items.Select(x => new NodeSummary(x.Metadata?.Name ?? "unknown", x.Status?.Conditions?.Any(c => c.Type == "Ready" && c.Status == "True") == true ? "Ready" : "NotReady", FormatPercent(metrics.Nodes, x.Metadata?.Name, true), FormatPercent(metrics.Nodes, x.Metadata?.Name, false), x.Metadata?.Labels?.ContainsKey("node-role.kubernetes.io/control-plane") == true ? "control-plane" : "worker")).ToArray(),
+                clusterEvents);
         }
 
         var localDeployments = await db.Deployments.AsNoTracking().ToListAsync(cancellationToken);
@@ -60,6 +69,31 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
             new EventSummary("Warning", "BackOff", "catalog-worker container restarted once", "production", DateTimeOffset.UtcNow.AddHours(-1))
         };
         return new DashboardResponse(new ClusterSummary("Demo cluster", "v1.30.2", localNamespaces + 4, 6, 1), new ResourceSummary(localDeployments.Sum(x => x.AvailableReplicas), localDeployments.Count, localNodes.Length, 39, 54), localNodes, events);
+    }
+
+    private async Task<IReadOnlyList<EventSummary>> ReadClusterEventsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var events = await client!.CoreV1.ListEventForAllNamespacesAsync(limit: 50, cancellationToken: cancellationToken);
+            return events.Items
+                .OrderByDescending(x => x.LastTimestamp ?? x.EventTime ?? x.FirstTimestamp ?? DateTime.MinValue)
+                .Take(5)
+                .Select(x => new EventSummary(x.Type ?? "Normal", x.Reason ?? "Event", x.Message ?? "", x.Metadata?.NamespaceProperty ?? x.InvolvedObject?.NamespaceProperty ?? "cluster", new DateTimeOffset(x.LastTimestamp ?? x.EventTime ?? x.FirstTimestamp ?? DateTime.UtcNow)))
+                .ToArray();
+        }
+        catch (HttpOperationException exception)
+        {
+            logger.LogWarning("Kubernetes events are unavailable: {Reason}", exception.Message);
+            return Array.Empty<EventSummary>();
+        }
+    }
+
+    private static string FormatPercent(IReadOnlyDictionary<string, NodeResourceMetrics> metrics, string? nodeName, bool cpu)
+    {
+        if (nodeName is null || !metrics.TryGetValue(nodeName, out var value)) return "—";
+        var percent = cpu ? value.CpuUsagePercent : value.MemoryUsagePercent;
+        return percent.HasValue ? $"{percent.Value:0}%" : "—";
     }
 
     public async Task ApplyDeploymentAsync(Deployment deployment, CancellationToken cancellationToken)

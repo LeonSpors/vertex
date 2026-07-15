@@ -7,11 +7,14 @@ metadata:
     {{- include "vertex.labels" . | nindent 4 }}
 rules:
   - apiGroups: ["", "apps", "networking.k8s.io", "policy"]
-    resources: ["pods", "pods/log", "services", "secrets", "namespaces", "resourcequotas", "limitranges", "deployments", "deployments/scale", "ingresses", "events"]
+    resources: ["pods", "pods/log", "services", "secrets", "namespaces", "resourcequotas", "limitranges", "deployments", "deployments/scale", "ingresses", "ingressclasses", "events"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: [""]
     resources: ["nodes", "storageclasses"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -28,4 +31,3 @@ subjects:
     name: {{ .Values.serviceAccount.name }}
     namespace: {{ .Release.Namespace }}
 {{- end }}
-

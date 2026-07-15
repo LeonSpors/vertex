@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: '10.x' }
-      - run: dotnet restore backend/src/Vertex.Api/Vertex.Api.csproj --source https://api.nuget.org/v3/index.json
+      - run: dotnet restore backend/Vertex.sln --source https://api.nuget.org/v3/index.json
       - run: dotnet build backend/src/Vertex.Api/Vertex.Api.csproj --no-restore --configuration Release
       - run: dotnet test backend/tests/Vertex.Domain.Tests/Vertex.Domain.Tests.csproj --configuration Release --no-restore
 

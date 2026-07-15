@@ -125,6 +125,10 @@ helm upgrade --install vertex ./helm/vertex --namespace vertex --create-namespac
 
 The API exposes `/health/live` and `/health/ready`. Workload manifests include resource requests/limits, probes, a PodDisruptionBudget, and HPA-ready labels/configuration.
 
+### Live cluster mode
+
+Set `Kubernetes__Mode=Cluster` for the API (the Helm chart does this by default). In this mode the dashboard reads the Kubernetes API server version, namespaces, nodes, pods, deployments, storage classes, ingress classes, and recent events through KubernetesClient. CPU and memory utilization are read from `metrics.k8s.io` when metrics-server is installed; if it is unavailable, Vertex displays `—` and logs a clear warning instead of fabricating telemetry. Local `Demo` mode is deliberately seeded and labelled as demo data.
+
 ## Roadmap
 
 - GitHub, GitLab, and Azure DevOps source integrations
