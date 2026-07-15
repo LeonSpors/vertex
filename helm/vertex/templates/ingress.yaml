@@ -1,0 +1,28 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "vertex.fullname" . }}
+  labels:
+    {{- include "vertex.labels" . | nindent 4 }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.issuer | quote }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    - hosts: [{{ .Values.ingress.host }}]
+      secretName: vertex-tls
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend: { service: { name: {{ include "vertex.fullname" . }}-api, port: { name: http } } }
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: {{ include "vertex.fullname" . }}-frontend, port: { name: http } } }
+{{- end }}
+

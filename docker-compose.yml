@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: vertex
+      POSTGRES_USER: vertex
+      POSTGRES_PASSWORD: vertex
+    ports:
+      - "5432:5432"
+    volumes:
+      - vertex-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vertex -d vertex"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - vertex-redis:/data
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: src/Vertex.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Database__UseInMemory: "false"
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=vertex;Username=vertex;Password=vertex
+      Kubernetes__Mode: Demo
+      Jwt__Key: replace-this-compose-key-with-a-secret-at-deploy-time
+      Cors__Origins__0: http://localhost:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5080:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  vertex-postgres:
+  vertex-redis:
+

@@ -1,0 +1,11 @@
+apiVersion: v2
+name: vertex
+description: Vertex Internal Developer Platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kubernetes
+  - developer-platform
+  - internal-developer-platform
+
