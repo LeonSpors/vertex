@@ -69,7 +69,9 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. The local account is:
+The API runs at `http://localhost:5000`; the Vue console runs at `http://localhost:5173`. Open the console URL, not the API URL. The API root intentionally has no UI route, so `http://localhost:5000/` returns 404; use `/health/live` or the `/api/*` endpoints instead.
+
+The local account is:
 
 ```text
 Email:    admin@vertex.local
@@ -136,4 +138,3 @@ The API exposes `/health/live` and `/health/ready`. Workload manifests include r
 ## License
 
 Vertex is an architectural MVP intended to evolve into an open-source developer platform.
-
