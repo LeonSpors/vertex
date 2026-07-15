@@ -20,22 +20,22 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
     private readonly KubernetesOptions settings;
     private readonly ILogger<KubernetesPlatformGateway> logger;
     private readonly Vertex.Infrastructure.Persistence.VertexDbContext db;
-    private readonly IKubernetes? client;
+    private readonly KubernetesClientProvider clientProvider;
     private readonly KubernetesMetricsReader metricsReader;
 
-    public KubernetesPlatformGateway(IOptions<KubernetesOptions> options, ILogger<KubernetesPlatformGateway> logger, Vertex.Infrastructure.Persistence.VertexDbContext db, KubernetesMetricsReader metricsReader)
+    public KubernetesPlatformGateway(IOptions<KubernetesOptions> options, ILogger<KubernetesPlatformGateway> logger, Vertex.Infrastructure.Persistence.VertexDbContext db, KubernetesClientProvider clientProvider, KubernetesMetricsReader metricsReader)
     {
         settings = options.Value;
         this.logger = logger;
         this.db = db;
+        this.clientProvider = clientProvider;
         this.metricsReader = metricsReader;
-        client = settings.Mode.Equals("Cluster", StringComparison.OrdinalIgnoreCase)
-            ? new k8s.Kubernetes(KubernetesClientConfiguration.BuildDefaultConfig())
-            : null;
     }
 
     public async Task<DashboardResponse> GetDashboardAsync(CancellationToken cancellationToken)
     {
+        var setup = await clientProvider.GetAsync(cancellationToken);
+        var client = await clientProvider.GetClientAsync(cancellationToken);
         if (client is not null)
         {
             var deployments = await client.AppsV1.ListDeploymentForAllNamespacesAsync(cancellationToken: cancellationToken);
@@ -44,14 +44,22 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
             var pods = await client.CoreV1.ListPodForAllNamespacesAsync(cancellationToken: cancellationToken);
             var storageClasses = await client.StorageV1.ListStorageClassAsync(cancellationToken: cancellationToken);
             var ingressClasses = await client.NetworkingV1.ListIngressClassAsync(cancellationToken: cancellationToken);
-            var version = await client.Version.GetCodeAsync(cancellationToken);
-            var clusterEvents = await ReadClusterEventsAsync(cancellationToken);
+            var clusterEvents = await ReadClusterEventsAsync(client, cancellationToken);
             var metrics = await metricsReader.ReadAsync(client, nodes.Items.ToArray(), cancellationToken);
             return new DashboardResponse(
-                new ClusterSummary("Connected", version.GitVersion ?? $"v{version.Major}.{version.Minor}", namespaces.Items.Count, storageClasses.Items.Count, ingressClasses.Items.Count),
+                new ClusterSummary("Connected", setup.Version ?? "Unknown", namespaces.Items.Count, storageClasses.Items.Count, ingressClasses.Items.Count),
                 new ResourceSummary(pods.Items.Count(x => string.Equals(x.Status?.Phase, "Running", StringComparison.OrdinalIgnoreCase)), deployments.Items.Count(x => (x.Status?.AvailableReplicas ?? 0) > 0), nodes.Items.Count, metrics.CpuUsagePercent, metrics.MemoryUsagePercent),
                 nodes.Items.Select(x => new NodeSummary(x.Metadata?.Name ?? "unknown", x.Status?.Conditions?.Any(c => c.Type == "Ready" && c.Status == "True") == true ? "Ready" : "NotReady", FormatPercent(metrics.Nodes, x.Metadata?.Name, true), FormatPercent(metrics.Nodes, x.Metadata?.Name, false), x.Metadata?.Labels?.ContainsKey("node-role.kubernetes.io/control-plane") == true ? "control-plane" : "worker")).ToArray(),
                 clusterEvents);
+        }
+
+        if (settings.Mode.Equals("Cluster", StringComparison.OrdinalIgnoreCase))
+        {
+            return new DashboardResponse(
+                new ClusterSummary(setup.Status, setup.Version ?? "Not connected", 0, 0, 0),
+                new ResourceSummary(0, 0, 0, null, null),
+                Array.Empty<NodeSummary>(),
+                Array.Empty<EventSummary>());
         }
 
         var localDeployments = await db.Deployments.AsNoTracking().ToListAsync(cancellationToken);
@@ -71,11 +79,11 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
         return new DashboardResponse(new ClusterSummary("Demo cluster", "v1.30.2", localNamespaces + 4, 6, 1), new ResourceSummary(localDeployments.Sum(x => x.AvailableReplicas), localDeployments.Count, localNodes.Length, 39, 54), localNodes, events);
     }
 
-    private async Task<IReadOnlyList<EventSummary>> ReadClusterEventsAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<EventSummary>> ReadClusterEventsAsync(IKubernetes client, CancellationToken cancellationToken)
     {
         try
         {
-            var events = await client!.CoreV1.ListEventForAllNamespacesAsync(limit: 50, cancellationToken: cancellationToken);
+            var events = await client.CoreV1.ListEventForAllNamespacesAsync(limit: 50, cancellationToken: cancellationToken);
             return events.Items
                 .OrderByDescending(x => x.LastTimestamp ?? x.EventTime ?? x.FirstTimestamp ?? DateTime.MinValue)
                 .Take(5)
@@ -98,6 +106,7 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
 
     public async Task ApplyDeploymentAsync(Deployment deployment, CancellationToken cancellationToken)
     {
+        var client = await GetClientForOperationAsync(cancellationToken);
         if (client is null) { logger.LogInformation("Demo reconcile: Deployment, Service and optional Ingress for {Name} in {Namespace}", deployment.Name, deployment.Namespace); return; }
         var labels = new Dictionary<string, string> { ["app.kubernetes.io/name"] = deployment.Name, ["app.kubernetes.io/managed-by"] = "vertex" };
         var resource = new V1Deployment
@@ -129,18 +138,21 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
 
     public async Task ScaleDeploymentAsync(Deployment deployment, CancellationToken cancellationToken)
     {
+        var client = await GetClientForOperationAsync(cancellationToken);
         if (client is null) { logger.LogInformation("Demo reconcile: scaling {Name} to {Replicas}", deployment.Name, deployment.Replicas); return; }
         await client.AppsV1.PatchNamespacedDeploymentAsync(new V1Patch(JsonSerializer.Serialize(new { spec = new { replicas = deployment.Replicas } }), V1Patch.PatchType.MergePatch), deployment.Name, deployment.Namespace, cancellationToken: cancellationToken);
     }
 
     public async Task RestartDeploymentAsync(Deployment deployment, CancellationToken cancellationToken)
     {
+        var client = await GetClientForOperationAsync(cancellationToken);
         if (client is null) { logger.LogInformation("Demo reconcile: restarting {Name}", deployment.Name); return; }
         await client.AppsV1.PatchNamespacedDeploymentAsync(new V1Patch(JsonSerializer.Serialize(new { spec = new { template = new { metadata = new { annotations = new Dictionary<string, string> { ["vertex.dev/restarted-at"] = DateTimeOffset.UtcNow.ToString("O") } } } } }), V1Patch.PatchType.MergePatch), deployment.Name, deployment.Namespace, cancellationToken: cancellationToken);
     }
 
     public async Task DeleteDeploymentAsync(Deployment deployment, CancellationToken cancellationToken)
     {
+        var client = await GetClientForOperationAsync(cancellationToken);
         if (client is null) { logger.LogInformation("Demo reconcile: deleting {Name} in {Namespace}", deployment.Name, deployment.Namespace); return; }
         await client.AppsV1.DeleteNamespacedDeploymentAsync(deployment.Name, deployment.Namespace, body: new V1DeleteOptions(), cancellationToken: cancellationToken);
         await client.CoreV1.DeleteNamespacedServiceAsync(deployment.Name, deployment.Namespace, body: new V1DeleteOptions(), cancellationToken: cancellationToken);
@@ -149,6 +161,7 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
 
     public async Task CreateEnvironmentAsync(Vertex.Domain.Entities.Environment environment, CancellationToken cancellationToken)
     {
+        var client = await GetClientForOperationAsync(cancellationToken);
         if (client is null) { logger.LogInformation("Demo reconcile: namespace {Namespace}, ResourceQuota and LimitRange", environment.Namespace); return; }
         await client.CoreV1.CreateNamespaceAsync(new V1Namespace { ApiVersion = "v1", Kind = "Namespace", Metadata = new V1ObjectMeta { Name = environment.Namespace, Labels = new Dictionary<string, string> { ["vertex.dev/environment"] = environment.Name } } }, cancellationToken: cancellationToken);
         await client.CoreV1.CreateNamespacedResourceQuotaAsync(new V1ResourceQuota { ApiVersion = "v1", Kind = "ResourceQuota", Metadata = new V1ObjectMeta { Name = "vertex-quota", NamespaceProperty = environment.Namespace }, Spec = new V1ResourceQuotaSpec { Hard = new Dictionary<string, ResourceQuantity> { ["pods"] = new("50"), ["requests.cpu"] = new("4"), ["requests.memory"] = new("8Gi") } } }, environment.Namespace, cancellationToken: cancellationToken);
@@ -157,12 +170,14 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
 
     public async Task DeleteEnvironmentAsync(Vertex.Domain.Entities.Environment environment, CancellationToken cancellationToken)
     {
+        var client = await GetClientForOperationAsync(cancellationToken);
         if (client is null) { logger.LogInformation("Demo reconcile: deleting namespace {Namespace}", environment.Namespace); return; }
         await client.CoreV1.DeleteNamespaceAsync(environment.Namespace, body: new V1DeleteOptions(), cancellationToken: cancellationToken);
     }
 
     public async Task<IReadOnlyList<LogLine>> GetLogsAsync(string application, string? pod, CancellationToken cancellationToken)
     {
+        var client = await GetClientForOperationAsync(cancellationToken);
         if (client is not null && !string.IsNullOrWhiteSpace(pod))
         {
             await using var raw = await client.CoreV1.ReadNamespacedPodLogAsync(pod, settings.DefaultNamespace, cancellationToken: cancellationToken);
@@ -174,6 +189,26 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
         return new[] { new LogLine(now.AddSeconds(-38).ToString("HH:mm:ss"), "INFO", $"{application} starting application server"), new LogLine(now.AddSeconds(-33).ToString("HH:mm:ss"), "INFO", "connected to PostgreSQL and Redis"), new LogLine(now.AddSeconds(-25).ToString("HH:mm:ss"), "INFO", "health probe passed: /health/ready"), new LogLine(now.AddSeconds(-14).ToString("HH:mm:ss"), "INFO", $"request completed pod={pod} status=200 duration=42ms"), new LogLine(now.AddSeconds(-3).ToString("HH:mm:ss"), "INFO", "reconciler heartbeat complete") };
     }
 
-    public Task ProvisionDatabaseAsync(Database database, CancellationToken cancellationToken) { logger.LogInformation("Provisioning PostgreSQL {Name} in {Namespace} through Helm", database.Name, database.Namespace); return Task.CompletedTask; }
-    public Task DeleteDatabaseAsync(Database database, CancellationToken cancellationToken) { logger.LogInformation("Uninstalling PostgreSQL release {Name} from {Namespace}", database.Name, database.Namespace); return Task.CompletedTask; }
+    public async Task ProvisionDatabaseAsync(Database database, CancellationToken cancellationToken)
+    {
+        _ = await GetClientForOperationAsync(cancellationToken);
+        logger.LogInformation("Provisioning PostgreSQL {Name} in {Namespace} through Helm", database.Name, database.Namespace);
+    }
+
+    public async Task DeleteDatabaseAsync(Database database, CancellationToken cancellationToken)
+    {
+        _ = await GetClientForOperationAsync(cancellationToken);
+        logger.LogInformation("Uninstalling PostgreSQL release {Name} from {Namespace}", database.Name, database.Namespace);
+    }
+
+    private async Task<IKubernetes?> GetClientForOperationAsync(CancellationToken cancellationToken)
+    {
+        var client = await clientProvider.GetClientAsync(cancellationToken);
+        if (client is null && settings.Mode.Equals("Cluster", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The Kubernetes cluster is not connected. Open Settings to complete the assisted setup.");
+        }
+
+        return client;
+    }
 }

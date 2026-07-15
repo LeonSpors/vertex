@@ -12,7 +12,7 @@ The repository is deliberately shaped like a real product: a small vertical-slic
 - Secrets: CRUD for opaque Kubernetes secrets with a protected-value UX
 - Databases: PostgreSQL provisioning contract with connection details
 - Logs: searchable, auto-scrolling pod log viewer
-- Settings: cluster capabilities and platform configuration
+- Settings: cluster capabilities, connection diagnostics, and platform configuration
 
 ## Architecture
 
@@ -95,6 +95,9 @@ The most important API settings are:
 | `Database__UseInMemory` | `true` | Use a local in-memory store for fast onboarding |
 | `ConnectionStrings__Postgres` | `Host=localhost;...` | PostgreSQL connection when in-memory mode is off |
 | `Kubernetes__Mode` | `Demo` | `Demo` or `Cluster` adapter |
+| `Kubernetes__KubeConfigPath` | empty | Optional explicit kubeconfig path; otherwise `KUBECONFIG`, the default kubeconfig, or in-cluster credentials are used |
+| `Kubernetes__Context` | empty | Optional kubeconfig context override |
+| `Kubernetes__ConnectionTimeoutSeconds` | `15` | Timeout for Kubernetes REST calls, clamped to 1-120 seconds |
 | `Jwt__Key` | development key | Signing key; replace in every real environment |
 | `Cors__Origins__0` | `http://localhost:5173` | Allowed browser origin |
 
@@ -120,7 +123,7 @@ helm upgrade --install vertex ./helm/vertex --namespace vertex --create-namespac
 1. Build and publish the API and frontend images from their Dockerfiles.
 2. Create a production `terraform.tfvars` containing PostgreSQL and JWT secrets.
 3. Apply the Terraform root module to install cluster dependencies and the platform.
-4. Set `kubernetes_mode=cluster` and point the API service account at the target cluster.
+4. Set `Kubernetes__Mode=Cluster` and deploy the API with a service account that has the permissions described by the Helm chart.
 5. Configure TLS through cert-manager and the supplied ingress resources.
 
 The API exposes `/health/live` and `/health/ready`. Workload manifests include resource requests/limits, probes, a PodDisruptionBudget, and HPA-ready labels/configuration.
@@ -128,6 +131,21 @@ The API exposes `/health/live` and `/health/ready`. Workload manifests include r
 ### Live cluster mode
 
 Set `Kubernetes__Mode=Cluster` for the API (the Helm chart does this by default). In this mode the dashboard reads the Kubernetes API server version, namespaces, nodes, pods, deployments, storage classes, ingress classes, and recent events through KubernetesClient. CPU and memory utilization are read from `metrics.k8s.io` when metrics-server is installed; if it is unavailable, Vertex displays `—` and logs a clear warning instead of fabricating telemetry. Local `Demo` mode is deliberately seeded and labelled as demo data.
+
+### Assisted cluster setup
+
+Cluster mode is intentionally lazy. Vertex starts even when kubeconfig or cluster credentials are missing, and the Settings screen exposes a guided setup panel instead of presenting a startup exception. The panel reports the connection error, provides copyable verification commands, and allows the operator to retry the connection.
+
+For a local API process, configure one of these options before restarting the API:
+
+```powershell
+$env:Kubernetes__Mode = "Cluster"
+$env:KUBECONFIG = "$HOME\.kube\config"
+# Optional: $env:Kubernetes__Context = "my-context"
+dotnet run --project backend/src/Vertex.Api
+```
+
+For a Kubernetes deployment, keep `Kubernetes__Mode=Cluster` and use the service account mounted into the API pod. The API does not accept or persist kubeconfig contents through the browser; credentials remain in the process environment, mounted file, or Kubernetes service-account token. Use the Settings connection check to confirm access, then install metrics-server if CPU and memory telemetry is required.
 
 ## Roadmap
 

@@ -1,5 +1,5 @@
 import { mockApplications, mockDashboard, mockDatabases, mockEnvironments, mockLogs, mockSecretDetails, mockSecrets } from '../data/mock'
-import type { Application, Dashboard, Database, Environment, Logs, Secret, SecretDetail } from '../types'
+import type { Application, ClusterSetup, Dashboard, Database, Environment, Logs, Secret, SecretDetail } from '../types'
 
 const API_URL = import.meta.env.VITE_API_URL ?? ''
 
@@ -21,6 +21,8 @@ async function safe<T>(call: () => Promise<T>, fallback: T): Promise<T> {
 export const api = {
   login: (email: string, password: string) => request<{ token: string; email: string; displayName: string; expiresAt: string }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   dashboard: () => safe<Dashboard>(() => request('/api/dashboard'), mockDashboard),
+  clusterSetup: () => safe<ClusterSetup>(() => request('/api/setup/cluster'), { status: 'Demo', mode: 'Demo', version: 'v1.30.2', error: null, steps: [] }),
+  checkClusterSetup: () => safe<ClusterSetup>(() => request('/api/setup/cluster/check', { method: 'POST' }), { status: 'Demo', mode: 'Demo', version: 'v1.30.2', error: null, steps: [] }),
   applications: () => safe<Application[]>(() => request('/api/applications'), mockApplications),
   deploy: (payload: { name: string; namespace: string; image: string; replicas: number; port: number; ingressHost?: string }) => request<Application>('/api/applications', { method: 'POST', body: JSON.stringify(payload) }),
   scale: (id: string, replicas: number) => request(`/api/applications/${id}/scale`, { method: 'PUT', body: JSON.stringify({ replicas }) }),
@@ -38,4 +40,3 @@ export const api = {
   deleteDatabase: (id: string) => request(`/api/databases/${id}`, { method: 'DELETE' }),
   logs: (application: string, pod?: string) => safe<Logs>(() => request(`/api/logs?application=${encodeURIComponent(application)}${pod ? `&pod=${encodeURIComponent(pod)}` : ''}`), mockLogs),
 }
-

@@ -1,12 +1,46 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { CheckCircleIcon, CircleStackIcon, Cog6ToothIcon, CubeTransparentIcon, GlobeAltIcon, ServerStackIcon } from '@heroicons/vue/24/outline'
+import ClusterSetupPanel from '../components/ClusterSetupPanel.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { api } from '../lib/api'
-import type { Dashboard } from '../types'
+import type { ClusterSetup, Dashboard } from '../types'
+
 const dashboard = ref<Dashboard | null>(null)
-onMounted(async () => { dashboard.value = await api.dashboard() })
-const capabilities = computed(() => [{ label: 'Kubernetes API', value: dashboard.value?.cluster.version ?? 'Loading…', icon: ServerStackIcon }, { label: 'Namespaces', value: dashboard.value ? `${dashboard.value.cluster.namespaces} available` : 'Loading…', icon: CubeTransparentIcon }, { label: 'Storage classes', value: dashboard.value ? `${dashboard.value.cluster.storageClasses} available` : 'Loading…', icon: CircleStackIcon }, { label: 'Ingress classes', value: dashboard.value ? `${dashboard.value.cluster.ingressClasses} available` : 'Loading…', icon: GlobeAltIcon }])
+const setup = ref<ClusterSetup | null>(null)
+const refreshing = ref(false)
+
+async function load() {
+  const [dashboardData, setupData] = await Promise.all([api.dashboard(), api.clusterSetup()])
+  dashboard.value = dashboardData
+  setup.value = setupData
+}
+
+async function refreshSetup() {
+  refreshing.value = true
+  setup.value = await api.checkClusterSetup()
+  refreshing.value = false
+}
+
+onMounted(load)
+
+const capabilities = computed(() => [
+  { label: 'Kubernetes API', value: dashboard.value?.cluster.version ?? 'Loading...', icon: ServerStackIcon },
+  { label: 'Namespaces', value: dashboard.value ? `${dashboard.value.cluster.namespaces} available` : 'Loading...', icon: CubeTransparentIcon },
+  { label: 'Storage classes', value: dashboard.value ? `${dashboard.value.cluster.storageClasses} available` : 'Loading...', icon: CircleStackIcon },
+  { label: 'Ingress classes', value: dashboard.value ? `${dashboard.value.cluster.ingressClasses} available` : 'Loading...', icon: GlobeAltIcon },
+])
 </script>
 
-<template><PageHeader eyebrow="Platform configuration" title="Settings" description="Understand the cluster Vertex is connected to and the capabilities available to your workspace." /><div class="grid gap-5 xl:grid-cols-[1fr_.7fr]"><section class="surface overflow-hidden"><div class="border-b border-line/70 p-5 sm:p-6"><div class="flex items-center gap-3"><div class="grid h-9 w-9 place-items-center rounded-lg bg-accent/10 text-accent"><Cog6ToothIcon class="h-5 w-5" /></div><div><h2 class="text-base font-semibold text-white">Cluster information</h2><p class="mt-1 text-xs text-slate-600">Read-only details from the active control plane.</p></div></div></div><div class="grid gap-px bg-line/60 sm:grid-cols-2"><div v-for="capability in capabilities" :key="capability.label" class="flex items-center gap-3 bg-panel p-5"><div class="grid h-9 w-9 place-items-center rounded-lg bg-white/[.04] text-slate-400"><component :is="capability.icon" class="h-4 w-4" /></div><div><p class="text-xs text-slate-500">{{ capability.label }}</p><p class="mt-1 text-sm font-semibold text-slate-200">{{ capability.value }}</p></div></div></div><div class="flex items-center gap-3 border-t border-line/70 p-5 sm:p-6"><CheckCircleIcon class="h-5 w-5 text-accent" /><div><p class="text-sm font-semibold text-slate-200">{{ dashboard?.cluster.status ?? 'Connecting to cluster…' }}</p><p class="mt-1 text-xs text-slate-600">Live capability snapshot from the dashboard provider.</p></div></div></section><section class="surface p-5 sm:p-6"><p class="eyebrow">Runtime</p><h2 class="mt-2 text-base font-semibold text-white">Vertex services</h2><div class="mt-5 space-y-3"><div class="flex items-center justify-between rounded-xl border border-line bg-ink/30 p-3"><div><p class="text-sm text-slate-300">Vertex API</p><p class="mt-1 font-mono text-[11px] text-slate-600">v0.1.0 · FastEndpoints</p></div><span class="flex items-center gap-1.5 text-[11px] text-accent"><span class="h-1.5 w-1.5 rounded-full bg-accent" />Healthy</span></div><div class="flex items-center justify-between rounded-xl border border-line bg-ink/30 p-3"><div><p class="text-sm text-slate-300">Data plane</p><p class="mt-1 font-mono text-[11px] text-slate-600">PostgreSQL · Redis</p></div><span class="flex items-center gap-1.5 text-[11px] text-accent"><span class="h-1.5 w-1.5 rounded-full bg-accent" />Healthy</span></div><div class="flex items-center justify-between rounded-xl border border-line bg-ink/30 p-3"><div><p class="text-sm text-slate-300">Observability</p><p class="mt-1 font-mono text-[11px] text-slate-600">Prometheus · Grafana</p></div><span class="flex items-center gap-1.5 text-[11px] text-accent"><span class="h-1.5 w-1.5 rounded-full bg-accent" />Healthy</span></div></div><div class="mt-8 rounded-xl border border-violet/15 bg-violet/[.04] p-4"><p class="text-sm font-semibold text-violet">Built for the next cluster</p><p class="mt-2 text-xs leading-5 text-slate-500">Multi-cluster target selection, OIDC, RBAC, audit logs, and provider plugins are intentionally kept behind the current platform ports.</p></div></section></div></template>
+<template>
+  <PageHeader eyebrow="Platform configuration" title="Settings" description="Understand the cluster Vertex is connected to and the capabilities available to your workspace." />
+  <ClusterSetupPanel v-if="setup?.status === 'SetupRequired'" :setup="setup" :refreshing="refreshing" @refresh="refreshSetup" />
+  <div class="grid gap-5 xl:grid-cols-[1fr_.7fr]">
+    <section class="surface overflow-hidden">
+      <div class="border-b border-line/70 p-5 sm:p-6"><div class="flex items-center gap-3"><div class="grid h-9 w-9 items-center justify-center rounded-lg bg-accent/10 text-accent"><Cog6ToothIcon class="h-5 w-5" /></div><div><h2 class="text-base font-semibold text-white">Cluster information</h2><p class="mt-1 text-xs text-slate-600">Read-only details from the active control plane.</p></div></div></div>
+      <div class="grid gap-px bg-line/60 sm:grid-cols-2"><div v-for="capability in capabilities" :key="capability.label" class="flex items-center gap-3 bg-panel p-5"><div class="grid h-9 w-9 items-center justify-center rounded-lg bg-white/[.04] text-slate-400"><component :is="capability.icon" class="h-4 w-4" /></div><div><p class="text-xs text-slate-500">{{ capability.label }}</p><p class="mt-1 text-sm font-semibold text-slate-200">{{ capability.value }}</p></div></div></div>
+      <div class="flex items-center gap-3 border-t border-line/70 p-5 sm:p-6"><CheckCircleIcon class="h-5 w-5 text-accent" /><div><p class="text-sm font-semibold text-slate-200">{{ dashboard?.cluster.status ?? 'Connecting to cluster...' }}</p><p class="mt-1 text-xs text-slate-600">Live capability snapshot from the dashboard provider.</p></div></div>
+    </section>
+    <section class="surface p-5 sm:p-6"><p class="eyebrow">Runtime</p><h2 class="mt-2 text-base font-semibold text-white">Vertex services</h2><div class="mt-5 space-y-3"><div class="flex items-center justify-between rounded-xl border border-line bg-ink/30 p-3"><div><p class="text-sm text-slate-300">Vertex API</p><p class="mt-1 font-mono text-[11px] text-slate-600">v0.1.0 - FastEndpoints</p></div><span class="flex items-center gap-1.5 text-[11px] text-accent"><span class="h-1.5 w-1.5 rounded-full bg-accent" />Healthy</span></div><div class="flex items-center justify-between rounded-xl border border-line bg-ink/30 p-3"><div><p class="text-sm text-slate-300">Data plane</p><p class="mt-1 font-mono text-[11px] text-slate-600">PostgreSQL - Redis</p></div><span class="flex items-center gap-1.5 text-[11px] text-accent"><span class="h-1.5 w-1.5 rounded-full bg-accent" />Healthy</span></div><div class="flex items-center justify-between rounded-xl border border-line bg-ink/30 p-3"><div><p class="text-sm text-slate-300">Observability</p><p class="mt-1 font-mono text-[11px] text-slate-600">Prometheus - Grafana</p></div><span class="flex items-center gap-1.5 text-[11px] text-accent"><span class="h-1.5 w-1.5 rounded-full bg-accent" />Healthy</span></div></div><div class="mt-8 rounded-xl border border-violet/15 bg-violet/[.04] p-4"><p class="text-sm font-semibold text-violet">Built for the next cluster</p><p class="mt-2 text-xs leading-5 text-slate-500">Multi-cluster target selection, OIDC, RBAC, audit logs, and provider plugins are intentionally kept behind the current platform ports.</p></div></section>
+  </div>
+</template>

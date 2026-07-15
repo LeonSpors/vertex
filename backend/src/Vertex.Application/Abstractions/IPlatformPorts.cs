@@ -17,6 +17,12 @@ public interface IPlatformGateway
     Task DeleteDatabaseAsync(Database database, CancellationToken cancellationToken);
 }
 
+public interface IClusterSetupService
+{
+    Task<ClusterSetupResponse> GetAsync(CancellationToken cancellationToken);
+    Task<ClusterSetupResponse> CheckAsync(CancellationToken cancellationToken);
+}
+
 public interface ITokenService
 {
     Task<LoginResponse?> AuthenticateAsync(LoginRequest request, CancellationToken cancellationToken);

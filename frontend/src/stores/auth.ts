@@ -5,7 +5,7 @@ import { api } from '../lib/api'
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('vertex_token'))
   const email = ref(localStorage.getItem('vertex_email') ?? 'admin@vertex.local')
-  const displayName = ref(localStorage.getItem('vertex_name') ?? 'Alex Morgan')
+  const displayName = ref(localStorage.getItem('vertex_name') ?? 'Leon Spors')
   const isAuthenticated = computed(() => Boolean(token.value))
 
   async function login(inputEmail: string, password: string) {
@@ -13,7 +13,7 @@ export const useAuthStore = defineStore('auth', () => {
       const result = await api.login(inputEmail, password)
       token.value = result.token; email.value = result.email; displayName.value = result.displayName
     } catch {
-      token.value = 'local-demo-token'; email.value = inputEmail; displayName.value = 'Alex Morgan'
+      token.value = 'local-demo-token'; email.value = inputEmail; displayName.value = 'Leon Spors'
     }
     localStorage.setItem('vertex_token', token.value)
     localStorage.setItem('vertex_email', email.value)

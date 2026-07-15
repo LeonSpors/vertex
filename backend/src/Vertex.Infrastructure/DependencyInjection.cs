@@ -27,6 +27,8 @@ public static class DependencyInjection
         services.Configure<KubernetesOptions>(configuration.GetSection("Kubernetes"));
         services.Configure<JwtOptions>(configuration.GetSection("Jwt"));
         services.AddSingleton<KubernetesQuantityParser>();
+        services.AddSingleton<KubernetesClientProvider>();
+        services.AddSingleton<IClusterSetupService>(provider => provider.GetRequiredService<KubernetesClientProvider>());
         services.AddScoped<KubernetesMetricsReader>();
         services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
         services.AddScoped<DatabaseInitializer>();

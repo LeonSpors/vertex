@@ -19,6 +19,14 @@ export type Dashboard = {
   recentEvents: { type: string; reason: string; message: string; namespace: string; timestamp: string }[]
 }
 
+export type ClusterSetup = {
+  status: 'Connected' | 'Demo' | 'SetupRequired' | string
+  mode: string
+  version: string | null
+  error: string | null
+  steps: { number: number; title: string; description: string; command: string }[]
+}
+
 export type Environment = { id: string; name: string; namespace: string; owner: string; status: string; createdAt: string }
 export type Secret = { id: string; name: string; namespace: string; keyCount: number; updatedAt: string }
 export type SecretDetail = { id: string; name: string; namespace: string; values: Record<string, string>; updatedAt: string }
