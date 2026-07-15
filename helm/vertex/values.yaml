@@ -5,6 +5,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 api:
+  existingSecret: vertex-api-config
   image:
     repository: ghcr.io/vertex/vertex-api
     tag: latest
@@ -54,4 +55,3 @@ autoscaling:
   minReplicas: 2
   maxReplicas: 6
   targetCPUUtilizationPercentage: 70
-

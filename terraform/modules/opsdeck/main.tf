@@ -4,6 +4,12 @@ resource "kubernetes_secret" "postgres" {
   type = "Opaque"
 }
 
+resource "kubernetes_secret" "api" {
+  metadata { name = "vertex-api-config", namespace = var.namespace }
+  data = { "jwt-key" = var.jwt_key }
+  type = "Opaque"
+}
+
 resource "helm_release" "postgres" {
   name = "vertex-postgresql"
   namespace = var.namespace
@@ -33,6 +39,7 @@ resource "helm_release" "vertex" {
   values = [yamlencode({
     api = {
       image = { repository = split(":", var.api_image)[0], tag = split(":", var.api_image)[1] }
+      existingSecret = kubernetes_secret.api.metadata[0].name
     }
     frontend = {
       image = { repository = split(":", var.frontend_image)[0], tag = split(":", var.frontend_image)[1] }

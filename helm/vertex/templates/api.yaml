@@ -30,6 +30,9 @@ spec:
               value: {{ .Values.api.env.databaseUseInMemory | quote }}
             - name: Kubernetes__Mode
               value: {{ .Values.api.env.kubernetesMode | quote }}
+            - name: Jwt__Key
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.api.existingSecret }}, key: jwt-key }
             - name: ConnectionStrings__Postgres
               valueFrom:
                 secretKeyRef: { name: {{ .Values.postgres.existingSecret }}, key: connection-string }
@@ -62,4 +65,3 @@ spec:
     - name: http
       port: 80
       targetPort: http
-
