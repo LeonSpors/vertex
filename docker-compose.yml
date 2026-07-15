@@ -8,7 +8,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - vertex-postgres:/var/lib/postgresql/data
+      - vertex-postgres-18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U vertex -d vertex"]
       interval: 5s
@@ -49,6 +49,5 @@ services:
       - "8080:80"
 
 volumes:
-  vertex-postgres:
+  vertex-postgres-18:
   vertex-redis:
-
