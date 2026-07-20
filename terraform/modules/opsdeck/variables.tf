@@ -4,7 +4,7 @@ variable "api_image" { type = string }
 variable "frontend_image" { type = string }
 variable "domain" { type = string }
 variable "jwt_key" {
-  type = string
+  type      = string
   sensitive = true
 }
 variable "postgres_password" {

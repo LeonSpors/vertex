@@ -1,5 +1,5 @@
 variable "namespace" { type = string }
 variable "enabled" {
-  type = bool
+  type    = bool
   default = true
 }
