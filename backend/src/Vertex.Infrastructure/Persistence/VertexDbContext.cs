@@ -29,7 +29,6 @@ public sealed class VertexDbContext(DbContextOptions<VertexDbContext> options) :
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Namespace).HasMaxLength(63).IsRequired();
-            entity.Property(x => x.CredentialSecretName).HasMaxLength(63).IsRequired();
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
             entity.HasIndex(x => x.Namespace).IsUnique();
         });
@@ -52,6 +51,7 @@ public sealed class VertexDbContext(DbContextOptions<VertexDbContext> options) :
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Namespace).HasMaxLength(63).IsRequired();
+            entity.Property(x => x.CredentialSecretName).HasMaxLength(63).IsRequired();
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
             entity.HasIndex(x => new { x.Namespace, x.Name }).IsUnique();
         });
