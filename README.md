@@ -4,6 +4,15 @@ Vertex is a modern Internal Developer Platform for teams that want a friendly, s
 
 The repository is deliberately shaped like a real product: a small vertical-slice MVP, clean boundaries, local demo mode, and replaceable infrastructure adapters for the next stage of the platform.
 
+## Reviewer guide
+
+The fastest way to evaluate the platform is to start in Demo mode, then review the production-shaped controls:
+
+- [Security policy and threat model](SECURITY.md)
+- [Architecture decisions](docs/architecture-decisions.md)
+- [Operations runbook](docs/operations-runbook.md)
+- [Customer workshop outline](docs/customer-workshop.md)
+
 ## Product surface
 
 - Dashboard: cluster health, workload counts, resource usage, and recent events
@@ -156,6 +165,8 @@ dotnet run --project backend/src/Vertex.Api
 ```
 
 For a Kubernetes deployment, keep `Kubernetes__Mode=Cluster` and use the service account mounted into the API pod. The API does not accept or persist kubeconfig contents through the browser; credentials remain in the process environment, mounted file, or Kubernetes service-account token. Use the Settings connection check to confirm access, then install metrics-server if CPU and memory telemetry is required.
+
+The cluster apply path is retry-safe: existing deployments and ingresses are replaced with the current desired state, services are patched without changing their allocated cluster IP, and deletes tolerate resources that are already gone.
 
 ## Roadmap
 
