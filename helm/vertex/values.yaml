@@ -8,7 +8,7 @@ api:
   existingSecret: vertex-api-config
   image:
     repository: ghcr.io/vertex/vertex-api
-    tag: latest
+    tag: v0.1.0
     pullPolicy: IfNotPresent
   port: 8080
   resources:
@@ -21,7 +21,7 @@ api:
 frontend:
   image:
     repository: ghcr.io/vertex/vertex-frontend
-    tag: latest
+    tag: v0.1.0
     pullPolicy: IfNotPresent
   port: 8080
   resources:
@@ -49,6 +49,10 @@ ingress:
 serviceAccount:
   create: true
   name: vertex-api
+
+rbac:
+  managedNamespaces:
+    - vertex
 
 networkPolicy:
   enabled: true

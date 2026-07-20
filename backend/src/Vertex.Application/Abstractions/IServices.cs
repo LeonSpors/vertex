@@ -19,7 +19,7 @@ public interface IApplicationService
 public interface IEnvironmentService
 {
     Task<IReadOnlyList<EnvironmentSummary>> ListAsync(CancellationToken cancellationToken);
-    Task<EnvironmentSummary> CreateAsync(CreateEnvironmentRequest request, string owner, CancellationToken cancellationToken);
+    Task<EnvironmentSummary> CreateAsync(CreateEnvironmentRequest request, CancellationToken cancellationToken);
     Task DeleteAsync(Guid id, CancellationToken cancellationToken);
 }
 
@@ -42,4 +42,3 @@ public interface ILogService
 {
     Task<LogsResponse> GetAsync(string application, string? pod, CancellationToken cancellationToken);
 }
-

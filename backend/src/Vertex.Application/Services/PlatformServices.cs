@@ -12,13 +12,15 @@ public sealed class DashboardService(IPlatformGateway gateway) : IDashboardServi
 public sealed class ApplicationService(
     IDeploymentRepository repository,
     IUnitOfWork unitOfWork,
-    IPlatformGateway gateway) : IApplicationService
+    IPlatformGateway gateway,
+    ICurrentUser currentUser) : IApplicationService
 {
     public async Task<IReadOnlyList<ApplicationSummary>> ListAsync(CancellationToken cancellationToken)
-        => (await repository.ListAsync(cancellationToken)).Select(Map).ToArray();
+        => (await repository.ListAsync(cancellationToken)).Where(x => currentUser.CanAccessNamespace(x.Namespace)).Select(Map).ToArray();
 
     public async Task<ApplicationSummary> DeployAsync(DeployApplicationRequest request, CancellationToken cancellationToken)
     {
+        currentUser.DemandNamespace(request.Namespace);
         var deployment = new Deployment(Guid.NewGuid(), request.Name, request.Namespace, request.Image, request.Replicas, request.Port, request.IngressHost);
         await repository.AddAsync(deployment, cancellationToken);
         await gateway.ApplyDeploymentAsync(deployment, cancellationToken);
@@ -29,6 +31,7 @@ public sealed class ApplicationService(
     public async Task ScaleAsync(Guid id, ScaleApplicationRequest request, CancellationToken cancellationToken)
     {
         var deployment = await Find(id, cancellationToken);
+        currentUser.DemandNamespace(deployment.Namespace);
         deployment.Scale(request.Replicas);
         await gateway.ScaleDeploymentAsync(deployment, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -37,6 +40,7 @@ public sealed class ApplicationService(
     public async Task RestartAsync(Guid id, CancellationToken cancellationToken)
     {
         var deployment = await Find(id, cancellationToken);
+        currentUser.DemandNamespace(deployment.Namespace);
         deployment.MarkRestarted();
         await gateway.RestartDeploymentAsync(deployment, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -45,6 +49,7 @@ public sealed class ApplicationService(
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         var deployment = await Find(id, cancellationToken);
+        currentUser.DemandNamespace(deployment.Namespace);
         await gateway.DeleteDeploymentAsync(deployment, cancellationToken);
         repository.Remove(deployment);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -59,14 +64,16 @@ public sealed class ApplicationService(
 public sealed class EnvironmentService(
     IEnvironmentRepository repository,
     IUnitOfWork unitOfWork,
-    IPlatformGateway gateway) : IEnvironmentService
+    IPlatformGateway gateway,
+    ICurrentUser currentUser) : IEnvironmentService
 {
     public async Task<IReadOnlyList<EnvironmentSummary>> ListAsync(CancellationToken cancellationToken)
-        => (await repository.ListAsync(cancellationToken)).Select(Map).ToArray();
+        => (await repository.ListAsync(cancellationToken)).Where(x => currentUser.CanAccessNamespace(x.Namespace)).Select(Map).ToArray();
 
-    public async Task<EnvironmentSummary> CreateAsync(CreateEnvironmentRequest request, string owner, CancellationToken cancellationToken)
+    public async Task<EnvironmentSummary> CreateAsync(CreateEnvironmentRequest request, CancellationToken cancellationToken)
     {
-        var environment = new Vertex.Domain.Entities.Environment(Guid.NewGuid(), request.Name, request.Namespace, owner);
+        currentUser.DemandNamespace(request.Namespace);
+        var environment = new Vertex.Domain.Entities.Environment(Guid.NewGuid(), request.Name, request.Namespace, currentUser.Email ?? "unknown");
         await repository.AddAsync(environment, cancellationToken);
         await gateway.CreateEnvironmentAsync(environment, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -77,6 +84,7 @@ public sealed class EnvironmentService(
     {
         var environment = (await repository.ListAsync(cancellationToken)).FirstOrDefault(x => x.Id == id)
             ?? throw new KeyNotFoundException("Environment was not found.");
+        currentUser.DemandNamespace(environment.Namespace);
         await gateway.DeleteEnvironmentAsync(environment, cancellationToken);
         repository.Remove(environment);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -85,19 +93,21 @@ public sealed class EnvironmentService(
     private static EnvironmentSummary Map(Vertex.Domain.Entities.Environment x) => new(x.Id, x.Name, x.Namespace, x.Owner, x.Status.ToString(), x.CreatedAt);
 }
 
-public sealed class SecretService(ISecretRepository repository, IUnitOfWork unitOfWork) : ISecretService
+public sealed class SecretService(ISecretRepository repository, IUnitOfWork unitOfWork, ICurrentUser currentUser) : ISecretService
 {
     public async Task<IReadOnlyList<SecretSummary>> ListAsync(CancellationToken cancellationToken)
-        => (await repository.ListAsync(cancellationToken)).Select(x => new SecretSummary(x.Id, x.Name, x.Namespace, x.Values.Count, x.UpdatedAt)).ToArray();
+        => (await repository.ListAsync(cancellationToken)).Where(x => currentUser.CanAccessNamespace(x.Namespace)).Select(x => new SecretSummary(x.Id, x.Name, x.Namespace, x.Values.Count, x.UpdatedAt)).ToArray();
 
     public async Task<SecretDetail?> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         var secret = await repository.GetAsync(id, cancellationToken);
+        if (secret is not null) currentUser.DemandNamespace(secret.Namespace);
         return secret is null ? null : Map(secret);
     }
 
     public async Task<SecretDetail> UpsertAsync(Guid? id, UpsertSecretRequest request, CancellationToken cancellationToken)
     {
+        currentUser.DemandNamespace(request.Namespace);
         var secret = id.HasValue ? await repository.GetAsync(id.Value, cancellationToken) : null;
         if (secret is null)
         {
@@ -106,6 +116,7 @@ public sealed class SecretService(ISecretRepository repository, IUnitOfWork unit
         }
         else
         {
+            currentUser.DemandNamespace(secret.Namespace);
             secret.Update(request.Values);
         }
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -115,24 +126,27 @@ public sealed class SecretService(ISecretRepository repository, IUnitOfWork unit
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         var secret = await repository.GetAsync(id, cancellationToken) ?? throw new KeyNotFoundException("Secret was not found.");
+        currentUser.DemandNamespace(secret.Namespace);
         repository.Remove(secret);
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    private static SecretDetail Map(Secret x) => new(x.Id, x.Name, x.Namespace, new Dictionary<string, string>(x.Values), x.UpdatedAt);
+    private static SecretDetail Map(Secret x) => new(x.Id, x.Name, x.Namespace, x.Values.Keys.Order(StringComparer.Ordinal).ToArray(), x.UpdatedAt);
 }
 
 public sealed class DatabaseService(
     IDatabaseRepository repository,
     IUnitOfWork unitOfWork,
-    IPlatformGateway gateway) : IDatabaseService
+    IPlatformGateway gateway,
+    ICurrentUser currentUser) : IDatabaseService
 {
     public async Task<IReadOnlyList<DatabaseSummary>> ListAsync(CancellationToken cancellationToken)
-        => (await repository.ListAsync(cancellationToken)).Select(Map).ToArray();
+        => (await repository.ListAsync(cancellationToken)).Where(x => currentUser.CanAccessNamespace(x.Namespace)).Select(Map).ToArray();
 
     public async Task<DatabaseSummary> CreateAsync(CreateDatabaseRequest request, CancellationToken cancellationToken)
     {
-        var database = new Database(Guid.NewGuid(), request.Name, request.Namespace, $"{request.Name}-postgres.{request.Namespace}.svc.cluster.local", 5432, "vertex", "vertex-demo-password");
+        currentUser.DemandNamespace(request.Namespace);
+        var database = new Database(Guid.NewGuid(), request.Name, request.Namespace, $"{request.Name}-postgres.{request.Namespace}.svc.cluster.local", 5432, "vertex", $"{request.Name}-postgresql");
         await repository.AddAsync(database, cancellationToken);
         await gateway.ProvisionDatabaseAsync(database, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -143,20 +157,23 @@ public sealed class DatabaseService(
     {
         var database = (await repository.ListAsync(cancellationToken)).FirstOrDefault(x => x.Id == id)
             ?? throw new KeyNotFoundException("Database was not found.");
+        currentUser.DemandNamespace(database.Namespace);
         await gateway.DeleteDatabaseAsync(database, cancellationToken);
         repository.Remove(database);
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    private static DatabaseSummary Map(Database x) => new(x.Id, x.Name, x.Namespace, x.Host, x.Port, x.Username, x.Password, x.ConnectionString, x.Status.ToString(), x.CreatedAt);
+    private static DatabaseSummary Map(Database x) => new(x.Id, x.Name, x.Namespace, x.Host, x.Port, x.Username, x.CredentialSecretName, x.Status.ToString(), x.CreatedAt);
 }
 
-public sealed class LogService(IPlatformGateway gateway) : ILogService
+public sealed class LogService(IPlatformGateway gateway, IDeploymentRepository repository, ICurrentUser currentUser) : ILogService
 {
     public async Task<LogsResponse> GetAsync(string application, string? pod, CancellationToken cancellationToken)
     {
+        var deployment = (await repository.ListAsync(cancellationToken)).FirstOrDefault(x => x.Name == application)
+            ?? throw new KeyNotFoundException("Application was not found.");
+        currentUser.DemandNamespace(deployment.Namespace);
         var resolvedPod = string.IsNullOrWhiteSpace(pod) ? $"{application}-7c8bd9b9f8-x2k4m" : pod;
-        return new LogsResponse(application, resolvedPod, await gateway.GetLogsAsync(application, resolvedPod, cancellationToken));
+        return new LogsResponse(application, resolvedPod, await gateway.GetLogsAsync(application, deployment.Namespace, resolvedPod, cancellationToken));
     }
 }
-

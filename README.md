@@ -107,7 +107,7 @@ The most important API settings are:
 | Setting | Default | Purpose |
 |---|---|---|
 | `Database__UseInMemory` | `true` | Use a local in-memory store for fast onboarding |
-| `ConnectionStrings__Postgres` | `Host=localhost;...` | PostgreSQL connection when in-memory mode is off |
+| `ConnectionStrings__Postgres` | supplied through environment | PostgreSQL connection when in-memory mode is off |
 | `Kubernetes__Mode` | `Demo` | `Demo` or `Cluster` adapter |
 | `Kubernetes__KubeConfigPath` | empty | Optional explicit kubeconfig path; otherwise `KUBECONFIG`, the default kubeconfig, or in-cluster credentials are used |
 | `Kubernetes__Context` | empty | Optional kubeconfig context override |
@@ -164,7 +164,7 @@ $env:KUBECONFIG = "$HOME\.kube\config"
 dotnet run --project backend/src/Vertex.Api
 ```
 
-For a Kubernetes deployment, keep `Kubernetes__Mode=Cluster` and use the service account mounted into the API pod. The API does not accept or persist kubeconfig contents through the browser; credentials remain in the process environment, mounted file, or Kubernetes service-account token. Use the Settings connection check to confirm access, then install metrics-server if CPU and memory telemetry is required.
+For a Kubernetes deployment, keep `Kubernetes__Mode=Cluster` and use the service account mounted into the API pod. The Helm chart grants cluster-scoped read access only; workload writes are granted through namespace-scoped Roles listed in `rbac.managedNamespaces`. Add every managed workload namespace to that list before deployment. The API does not accept or persist kubeconfig contents through the browser; credentials remain in the process environment, mounted file, or Kubernetes service-account token. Use the Settings connection check to confirm access, then install metrics-server if CPU and memory telemetry is required.
 
 The cluster apply path is retry-safe: existing deployments and ingresses are replaced with the current desired state, services are patched without changing their allocated cluster IP, and deletes tolerate resources that are already gone.
 

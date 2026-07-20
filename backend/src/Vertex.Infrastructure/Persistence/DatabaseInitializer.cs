@@ -40,7 +40,7 @@ public sealed class DatabaseInitializer(VertexDbContext db, IPasswordHasher<User
                 new Secret(Guid.NewGuid(), "checkout-config", "production", new Dictionary<string, string> { ["DATABASE_URL"] = "postgres://••••", ["STRIPE_KEY"] = "sk_live_••••" }),
                 new Secret(Guid.NewGuid(), "catalog-config", "production", new Dictionary<string, string> { ["REDIS_URL"] = "redis://••••", ["SEARCH_TOKEN"] = "••••" }),
                 new Secret(Guid.NewGuid(), "preview-env", "preview-pr-482", new Dictionary<string, string> { ["FEATURE_FLAG"] = "new-checkout" }));
-            db.Databases.Add(new Database(Guid.NewGuid(), "checkout", "production", "checkout-postgres.production.svc.cluster.local", 5432, "vertex", "vertex-demo-password"));
+            db.Databases.Add(new Database(Guid.NewGuid(), "checkout", "production", "checkout-postgres.production.svc.cluster.local", 5432, "vertex", "vertex-postgresql"));
         }
 
         await db.SaveChangesAsync(cancellationToken);
