@@ -50,6 +50,8 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
 ---
 apiVersion: v1
 kind: Service
