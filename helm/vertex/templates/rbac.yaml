@@ -2,22 +2,59 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "vertex.fullname" . }}-api
+  name: {{ include "vertex.fullname" . }}-cluster-read
   labels:
     {{- include "vertex.labels" . | nindent 4 }}
 rules:
   - apiGroups: [""]
-    resources: ["pods", "pods/log", "services", "events"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    resources: ["namespaces", "nodes", "storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingressclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
   - apiGroups: [""]
     resources: ["namespaces"]
-    verbs: ["get", "list", "watch", "create", "delete"]
+    verbs: ["create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "vertex.fullname" . }}-cluster-read
+  labels:
+    {{- include "vertex.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "vertex.fullname" . }}-cluster-read
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.serviceAccount.name }}
+    namespace: {{ .Release.Namespace }}
+{{- range .Values.rbac.managedNamespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "vertex.fullname" $ }}-manager
+  namespace: {{ . }}
+  labels:
+    {{- include "vertex.labels" $ | nindent 4 }}
+rules:
   - apiGroups: [""]
-    resources: ["nodes", "storageclasses"]
+    resources: ["pods"]
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
-    resources: ["resourcequotas", "limitranges"]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["services", "resourcequotas", "limitranges"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -27,25 +64,21 @@ rules:
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["ingressclasses"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["metrics.k8s.io"]
-    resources: ["nodes", "pods"]
-    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
-  name: {{ include "vertex.fullname" . }}-api
+  name: {{ include "vertex.fullname" $ }}-manager
+  namespace: {{ . }}
   labels:
-    {{- include "vertex.labels" . | nindent 4 }}
+    {{- include "vertex.labels" $ | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: {{ include "vertex.fullname" . }}-api
+  kind: Role
+  name: {{ include "vertex.fullname" $ }}-manager
 subjects:
   - kind: ServiceAccount
-    name: {{ .Values.serviceAccount.name }}
-    namespace: {{ .Release.Namespace }}
+    name: {{ $.Values.serviceAccount.name }}
+    namespace: {{ $.Release.Namespace }}
+{{- end }}
 {{- end }}

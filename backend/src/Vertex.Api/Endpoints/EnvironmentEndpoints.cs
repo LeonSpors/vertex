@@ -14,7 +14,7 @@ public sealed class ListEnvironmentsEndpoint(IEnvironmentService service) : Endp
 public sealed class CreateEnvironmentEndpoint(IEnvironmentService service) : Endpoint<CreateEnvironmentRequest, ApiResponse<EnvironmentSummary>>
 {
     public override void Configure() { Post("/api/environments"); AuthSchemes("Bearer"); }
-    public override async Task HandleAsync(CreateEnvironmentRequest request, CancellationToken cancellationToken) => await SendAsync(ApiResponse<EnvironmentSummary>.Ok(await service.CreateAsync(request, "admin@vertex.local", cancellationToken)), StatusCodes.Status201Created, cancellationToken);
+    public override async Task HandleAsync(CreateEnvironmentRequest request, CancellationToken cancellationToken) => await SendAsync(ApiResponse<EnvironmentSummary>.Ok(await service.CreateAsync(request, cancellationToken)), StatusCodes.Status201Created, cancellationToken);
 }
 
 public sealed class DeleteEnvironmentEndpoint(IEnvironmentService service) : EndpointWithoutRequest<ApiResponse<object>>

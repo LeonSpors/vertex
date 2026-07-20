@@ -79,6 +79,7 @@ resource "helm_release" "vertex" {
       tls  = false
     }
     postgres = { existingSecret = kubernetes_secret.postgres.metadata[0].name }
+    rbac = { managedNamespaces = [var.namespace] }
   })]
   depends_on = [helm_release.postgres, helm_release.redis]
 }

@@ -4,7 +4,7 @@ public sealed class Database
 {
     private Database() { }
 
-    public Database(Guid id, string name, string @namespace, string host, int port, string username, string password)
+    public Database(Guid id, string name, string @namespace, string host, int port, string username, string credentialSecretName)
     {
         Id = id;
         Name = name;
@@ -12,7 +12,7 @@ public sealed class Database
         Host = host;
         Port = port;
         Username = username;
-        Password = password;
+        CredentialSecretName = credentialSecretName;
         Status = DatabaseStatus.Ready;
         CreatedAt = DateTimeOffset.UtcNow;
     }
@@ -23,12 +23,10 @@ public sealed class Database
     public string Host { get; private set; } = string.Empty;
     public int Port { get; private set; }
     public string Username { get; private set; } = string.Empty;
-    public string Password { get; private set; } = string.Empty;
+    public string CredentialSecretName { get; private set; } = string.Empty;
     public DatabaseStatus Status { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
-    public string ConnectionString => $"Host={Host};Port={Port};Database={Name};Username={Username};Password={Password}";
 }
 
 public enum DatabaseStatus { Ready, Provisioning, Failed, Deleting }
-

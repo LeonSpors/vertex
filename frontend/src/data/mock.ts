@@ -34,12 +34,12 @@ export const mockSecrets: Secret[] = [
 ]
 
 export const mockSecretDetails: Record<string, SecretDetail> = {
-  'sec-checkout': { id: 'sec-checkout', name: 'checkout-config', namespace: 'production', values: { DATABASE_URL: 'postgres://••••••••', STRIPE_KEY: 'sk_live_••••••••' }, updatedAt: '2026-07-14T16:20:00Z' },
-  'sec-catalog': { id: 'sec-catalog', name: 'catalog-config', namespace: 'production', values: { REDIS_URL: 'redis://••••••••', SEARCH_TOKEN: '••••••••' }, updatedAt: '2026-07-12T10:05:00Z' },
-  'sec-preview': { id: 'sec-preview', name: 'preview-env', namespace: 'preview-pr-482', values: { FEATURE_FLAG: 'new-checkout' }, updatedAt: '2026-07-15T07:32:00Z' },
+  'sec-checkout': { id: 'sec-checkout', name: 'checkout-config', namespace: 'production', keys: ['DATABASE_URL', 'STRIPE_KEY'], updatedAt: '2026-07-14T16:20:00Z' },
+  'sec-catalog': { id: 'sec-catalog', name: 'catalog-config', namespace: 'production', keys: ['REDIS_URL', 'SEARCH_TOKEN'], updatedAt: '2026-07-12T10:05:00Z' },
+  'sec-preview': { id: 'sec-preview', name: 'preview-env', namespace: 'preview-pr-482', keys: ['FEATURE_FLAG'], updatedAt: '2026-07-15T07:32:00Z' },
 }
 
-export const mockDatabases: Database[] = [{ id: 'db-checkout', name: 'checkout', namespace: 'production', host: 'checkout-postgres.production.svc.cluster.local', port: 5432, username: 'vertex', password: 'vertex-demo-password', connectionString: 'Host=checkout-postgres.production.svc.cluster.local;Port=5432;Database=checkout;Username=vertex;Password=••••••••', status: 'Ready', createdAt: '2026-05-28T13:30:00Z' }]
+export const mockDatabases: Database[] = [{ id: 'db-checkout', name: 'checkout', namespace: 'production', host: 'checkout-postgres.production.svc.cluster.local', port: 5432, username: 'vertex', credentialSecretName: 'vertex-postgresql', status: 'Ready', createdAt: '2026-05-28T13:30:00Z' }]
 
 export const mockLogs: Logs = {
   application: 'checkout-api', pod: 'checkout-api-7c8bd9b9f8-x2k4m', lines: [
@@ -50,4 +50,3 @@ export const mockLogs: Logs = {
     { timestamp: '09:41:37', level: 'INFO', message: 'reconciler heartbeat complete' },
   ],
 }
-

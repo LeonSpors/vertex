@@ -29,6 +29,6 @@ export type ClusterSetup = {
 
 export type Environment = { id: string; name: string; namespace: string; owner: string; status: string; createdAt: string }
 export type Secret = { id: string; name: string; namespace: string; keyCount: number; updatedAt: string }
-export type SecretDetail = { id: string; name: string; namespace: string; values: Record<string, string>; updatedAt: string }
-export type Database = { id: string; name: string; namespace: string; host: string; port: number; username: string; password: string; connectionString: string; status: string; createdAt: string }
+export type SecretDetail = { id: string; name: string; namespace: string; keys: string[]; updatedAt: string }
+export type Database = { id: string; name: string; namespace: string; host: string; port: number; username: string; credentialSecretName: string; status: string; createdAt: string }
 export type Logs = { application: string; pod: string; lines: { timestamp: string; level: string; message: string }[] }

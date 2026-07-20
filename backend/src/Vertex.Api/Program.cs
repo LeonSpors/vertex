@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Vertex.Application;
+using Vertex.Application.Abstractions;
+using Vertex.Api.Security;
 using Vertex.Infrastructure;
 using Vertex.Infrastructure.Auth;
 using Vertex.Infrastructure.Persistence;
@@ -19,6 +21,8 @@ builder.Host.UseSerilog();
 
 builder.Services.AddVertexApplication();
 builder.Services.AddVertexInfrastructure(builder.Configuration);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 builder.Services.AddFastEndpoints();
 builder.Services.AddHealthChecks();
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
@@ -60,6 +64,7 @@ app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
     {
         KeyNotFoundException => StatusCodes.Status404NotFound,
         ArgumentException => StatusCodes.Status400BadRequest,
+        UnauthorizedAccessException => StatusCodes.Status403Forbidden,
         _ => StatusCodes.Status500InternalServerError
     };
     await context.Response.WriteAsJsonAsync(new { success = false, data = (object?)null, error = exception?.Message ?? "Unexpected server error." });
@@ -72,4 +77,3 @@ app.MapHealthChecks("/health/live");
 app.MapHealthChecks("/health/ready");
 
 app.Run();
-

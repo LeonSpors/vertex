@@ -12,7 +12,7 @@ public interface IPlatformGateway
     Task DeleteDeploymentAsync(Deployment deployment, CancellationToken cancellationToken);
     Task CreateEnvironmentAsync(Vertex.Domain.Entities.Environment environment, CancellationToken cancellationToken);
     Task DeleteEnvironmentAsync(Vertex.Domain.Entities.Environment environment, CancellationToken cancellationToken);
-    Task<IReadOnlyList<LogLine>> GetLogsAsync(string application, string? pod, CancellationToken cancellationToken);
+    Task<IReadOnlyList<LogLine>> GetLogsAsync(string application, string @namespace, string? pod, CancellationToken cancellationToken);
     Task ProvisionDatabaseAsync(Database database, CancellationToken cancellationToken);
     Task DeleteDatabaseAsync(Database database, CancellationToken cancellationToken);
 }

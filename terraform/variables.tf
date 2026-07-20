@@ -12,11 +12,11 @@ variable "namespace" {
 }
 variable "api_image" {
   type    = string
-  default = "ghcr.io/vertex/vertex-api:latest"
+  default = "ghcr.io/vertex/vertex-api:v0.1.0"
 }
 variable "frontend_image" {
   type    = string
-  default = "ghcr.io/vertex/vertex-frontend:latest"
+  default = "ghcr.io/vertex/vertex-frontend:v0.1.0"
 }
 variable "domain" {
   type    = string

@@ -205,12 +205,12 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
         await IgnoreNotFoundAsync(() => client.CoreV1.DeleteNamespaceAsync(environment.Namespace, body: new V1DeleteOptions(), cancellationToken: cancellationToken));
     }
 
-    public async Task<IReadOnlyList<LogLine>> GetLogsAsync(string application, string? pod, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<LogLine>> GetLogsAsync(string application, string @namespace, string? pod, CancellationToken cancellationToken)
     {
         var client = await GetClientForOperationAsync(cancellationToken);
         if (client is not null && !string.IsNullOrWhiteSpace(pod))
         {
-            await using var raw = await client.CoreV1.ReadNamespacedPodLogAsync(pod, settings.DefaultNamespace, cancellationToken: cancellationToken);
+            await using var raw = await client.CoreV1.ReadNamespacedPodLogAsync(pod, @namespace, cancellationToken: cancellationToken);
             using var reader = new StreamReader(raw);
             var content = await reader.ReadToEndAsync(cancellationToken);
             return content.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => new LogLine(DateTimeOffset.UtcNow.ToString("HH:mm:ss"), "INFO", line)).ToArray();
