@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Net;
 using k8s;
 using k8s.Autorest;
 using k8s.Models;
@@ -145,12 +146,23 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
                 }
             }
         };
-        await client.AppsV1.CreateNamespacedDeploymentAsync(resource, deployment.Namespace, cancellationToken: cancellationToken);
-        await client.CoreV1.CreateNamespacedServiceAsync(new V1Service { ApiVersion = "v1", Kind = "Service", Metadata = new V1ObjectMeta { Name = deployment.Name, NamespaceProperty = deployment.Namespace }, Spec = new V1ServiceSpec { Selector = labels, Ports = new List<V1ServicePort> { new() { Name = "http", Port = deployment.Port, TargetPort = (IntOrString)deployment.Port } } } }, deployment.Namespace, cancellationToken: cancellationToken);
+        await UpsertDeploymentAsync(client, resource, deployment.Namespace, cancellationToken);
+        var service = new V1Service
+        {
+            ApiVersion = "v1",
+            Kind = "Service",
+            Metadata = new V1ObjectMeta { Name = deployment.Name, NamespaceProperty = deployment.Namespace, Labels = labels },
+            Spec = new V1ServiceSpec
+            {
+                Selector = labels,
+                Ports = new List<V1ServicePort> { new() { Name = "http", Port = deployment.Port, TargetPort = (IntOrString)deployment.Port } }
+            }
+        };
+        await UpsertServiceAsync(client, service, deployment.Namespace, cancellationToken);
         if (!string.IsNullOrWhiteSpace(deployment.IngressHost))
         {
-            var ingress = new V1Ingress { ApiVersion = "networking.k8s.io/v1", Kind = "Ingress", Metadata = new V1ObjectMeta { Name = deployment.Name, NamespaceProperty = deployment.Namespace }, Spec = new V1IngressSpec { Rules = new List<V1IngressRule> { new() { Host = deployment.IngressHost, Http = new V1HTTPIngressRuleValue { Paths = new List<V1HTTPIngressPath> { new() { Path = "/", PathType = "Prefix", Backend = new V1IngressBackend { Service = new V1IngressServiceBackend { Name = deployment.Name, Port = new V1ServiceBackendPort { Number = deployment.Port } } } } } } } } } };
-            await client.NetworkingV1.CreateNamespacedIngressAsync(ingress, deployment.Namespace, cancellationToken: cancellationToken);
+            var ingress = new V1Ingress { ApiVersion = "networking.k8s.io/v1", Kind = "Ingress", Metadata = new V1ObjectMeta { Name = deployment.Name, NamespaceProperty = deployment.Namespace, Labels = labels }, Spec = new V1IngressSpec { Rules = new List<V1IngressRule> { new() { Host = deployment.IngressHost, Http = new V1HTTPIngressRuleValue { Paths = new List<V1HTTPIngressPath> { new() { Path = "/", PathType = "Prefix", Backend = new V1IngressBackend { Service = new V1IngressServiceBackend { Name = deployment.Name, Port = new V1ServiceBackendPort { Number = deployment.Port } } } } } } } } } };
+            await UpsertIngressAsync(client, ingress, deployment.Namespace, cancellationToken);
         }
     }
 
@@ -172,9 +184,9 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
     {
         var client = await GetClientForOperationAsync(cancellationToken);
         if (client is null) { logger.LogInformation("Demo reconcile: deleting {Name} in {Namespace}", deployment.Name, deployment.Namespace); return; }
-        await client.AppsV1.DeleteNamespacedDeploymentAsync(deployment.Name, deployment.Namespace, body: new V1DeleteOptions(), cancellationToken: cancellationToken);
-        await client.CoreV1.DeleteNamespacedServiceAsync(deployment.Name, deployment.Namespace, body: new V1DeleteOptions(), cancellationToken: cancellationToken);
-        if (!string.IsNullOrWhiteSpace(deployment.IngressHost)) await client.NetworkingV1.DeleteNamespacedIngressAsync(deployment.Name, deployment.Namespace, body: new V1DeleteOptions(), cancellationToken: cancellationToken);
+        await IgnoreNotFoundAsync(() => client.AppsV1.DeleteNamespacedDeploymentAsync(deployment.Name, deployment.Namespace, body: new V1DeleteOptions(), cancellationToken: cancellationToken));
+        await IgnoreNotFoundAsync(() => client.CoreV1.DeleteNamespacedServiceAsync(deployment.Name, deployment.Namespace, body: new V1DeleteOptions(), cancellationToken: cancellationToken));
+        if (!string.IsNullOrWhiteSpace(deployment.IngressHost)) await IgnoreNotFoundAsync(() => client.NetworkingV1.DeleteNamespacedIngressAsync(deployment.Name, deployment.Namespace, body: new V1DeleteOptions(), cancellationToken: cancellationToken));
     }
 
     public async Task CreateEnvironmentAsync(Vertex.Domain.Entities.Environment environment, CancellationToken cancellationToken)
@@ -190,7 +202,7 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
     {
         var client = await GetClientForOperationAsync(cancellationToken);
         if (client is null) { logger.LogInformation("Demo reconcile: deleting namespace {Namespace}", environment.Namespace); return; }
-        await client.CoreV1.DeleteNamespaceAsync(environment.Namespace, body: new V1DeleteOptions(), cancellationToken: cancellationToken);
+        await IgnoreNotFoundAsync(() => client.CoreV1.DeleteNamespaceAsync(environment.Namespace, body: new V1DeleteOptions(), cancellationToken: cancellationToken));
     }
 
     public async Task<IReadOnlyList<LogLine>> GetLogsAsync(string application, string? pod, CancellationToken cancellationToken)
@@ -218,6 +230,65 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
         _ = await GetClientForOperationAsync(cancellationToken);
         logger.LogInformation("Uninstalling PostgreSQL release {Name} from {Namespace}", database.Name, database.Namespace);
     }
+
+    private static async Task UpsertDeploymentAsync(IKubernetes client, V1Deployment desired, string @namespace, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var existing = await client.AppsV1.ReadNamespacedDeploymentAsync(desired.Metadata.Name, @namespace, cancellationToken: cancellationToken);
+            desired.Metadata.ResourceVersion = existing.Metadata?.ResourceVersion;
+            await client.AppsV1.ReplaceNamespacedDeploymentAsync(desired, desired.Metadata.Name, @namespace, cancellationToken: cancellationToken);
+        }
+        catch (HttpOperationException exception) when (IsNotFound(exception))
+        {
+            await client.AppsV1.CreateNamespacedDeploymentAsync(desired, @namespace, cancellationToken: cancellationToken);
+        }
+    }
+
+    private static async Task UpsertServiceAsync(IKubernetes client, V1Service desired, string @namespace, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var existing = await client.CoreV1.ReadNamespacedServiceAsync(desired.Metadata.Name, @namespace, cancellationToken: cancellationToken);
+            var patch = new V1Patch(JsonSerializer.Serialize(new
+            {
+                metadata = new { labels = desired.Metadata.Labels },
+                spec = new { selector = desired.Spec.Selector, ports = desired.Spec.Ports }
+            }), V1Patch.PatchType.MergePatch);
+            await client.CoreV1.PatchNamespacedServiceAsync(patch, existing.Metadata.Name, @namespace, cancellationToken: cancellationToken);
+        }
+        catch (HttpOperationException exception) when (IsNotFound(exception))
+        {
+            await client.CoreV1.CreateNamespacedServiceAsync(desired, @namespace, cancellationToken: cancellationToken);
+        }
+    }
+
+    private static async Task UpsertIngressAsync(IKubernetes client, V1Ingress desired, string @namespace, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var existing = await client.NetworkingV1.ReadNamespacedIngressAsync(desired.Metadata.Name, @namespace, cancellationToken: cancellationToken);
+            desired.Metadata.ResourceVersion = existing.Metadata?.ResourceVersion;
+            await client.NetworkingV1.ReplaceNamespacedIngressAsync(desired, desired.Metadata.Name, @namespace, cancellationToken: cancellationToken);
+        }
+        catch (HttpOperationException exception) when (IsNotFound(exception))
+        {
+            await client.NetworkingV1.CreateNamespacedIngressAsync(desired, @namespace, cancellationToken: cancellationToken);
+        }
+    }
+
+    private static async Task IgnoreNotFoundAsync(Func<Task> operation)
+    {
+        try
+        {
+            await operation();
+        }
+        catch (HttpOperationException exception) when (IsNotFound(exception))
+        {
+        }
+    }
+
+    private static bool IsNotFound(HttpOperationException exception) => exception.Response.StatusCode == HttpStatusCode.NotFound;
 
     private async Task<IKubernetes?> GetClientForOperationAsync(CancellationToken cancellationToken)
     {
