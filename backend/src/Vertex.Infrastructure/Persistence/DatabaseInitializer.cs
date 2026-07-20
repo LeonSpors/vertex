@@ -14,6 +14,12 @@ public sealed class DatabaseInitializer(VertexDbContext db, IPasswordHasher<User
         await db.Database.EnsureCreatedAsync(cancellationToken);
         if (await db.Users.AnyAsync(cancellationToken)) return;
 
+        if (!kubernetesOptions.Value.Mode.Equals("Demo", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogInformation("Skipped demo user and sample data seed for {Mode} mode", kubernetesOptions.Value.Mode);
+            return;
+        }
+
         var user = new User(Guid.NewGuid(), "admin@vertex.local", "Leon Spors", string.Empty);
         var hash = passwordHasher.HashPassword(user, "vertex-dev");
         var userEntry = db.Entry(user);

@@ -18,6 +18,6 @@ module "opsdeck" {
   frontend_image = var.frontend_image
   domain = var.domain
   jwt_key = var.jwt_key
+  postgres_password = var.postgres_password
   depends_on = [module.network]
 }
-

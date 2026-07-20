@@ -1,6 +1,6 @@
 resource "kubernetes_secret" "postgres" {
   metadata { name = "vertex-postgresql", namespace = var.namespace }
-  data = { "connection-string" = "Host=vertex-postgresql;Port=5432;Database=vertex;Username=vertex;Password=change-me" }
+  data = { "connection-string" = "Host=vertex-postgresql;Port=5432;Database=vertex;Username=vertex;Password=${var.postgres_password}" }
   type = "Opaque"
 }
 
@@ -18,7 +18,7 @@ resource "helm_release" "postgres" {
   version = "16.4.5"
   set { name = "auth.database", value = "vertex" }
   set { name = "auth.username", value = "vertex" }
-  set { name = "auth.password", value = "change-me" }
+  set { name = "auth.password", value = var.postgres_password }
   set { name = "primary.persistence.size", value = "20Gi" }
 }
 
