@@ -7,3 +7,7 @@ variable "jwt_key" {
   type = string
   sensitive = true
 }
+variable "postgres_password" {
+  type      = string
+  sensitive = true
+}

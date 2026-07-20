@@ -25,5 +25,8 @@ variable "domain" {
 variable "jwt_key" {
   type = string
   sensitive = true
-  default = "change-me-in-production-vertex-jwt-key"
+}
+variable "postgres_password" {
+  type      = string
+  sensitive = true
 }

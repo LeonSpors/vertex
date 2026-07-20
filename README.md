@@ -80,7 +80,12 @@ Password: vertex-dev
 
 ### Run dependencies with Docker Compose
 
+Create a local `.env` from `.env.example` before starting the production-shaped
+Compose profile. Compose now fails fast when deployment credentials are missing.
+
 ```powershell
+Copy-Item .env.example .env
+# Replace both values in .env before continuing.
 docker compose up --build
 ```
 
@@ -108,9 +113,14 @@ Terraform is organized into modules for network, monitoring, and the Vertex plat
 ```powershell
 cd terraform
 terraform init
-terraform plan -var="environment=dev"
-terraform apply -var="environment=dev"
+terraform plan -var="environment=dev" -var="jwt_key=$env:VERTEX_JWT_KEY" -var="postgres_password=$env:VERTEX_POSTGRES_PASSWORD"
+terraform apply -var="environment=dev" -var="jwt_key=$env:VERTEX_JWT_KEY" -var="postgres_password=$env:VERTEX_POSTGRES_PASSWORD"
 ```
+
+The Terraform variables `jwt_key` and `postgres_password` are required and
+sensitive. Supply them through a protected variable file or environment-backed
+automation; do not commit them to the repository or Terraform state stored in
+source control.
 
 The Helm chart in `helm/vertex` can also be installed directly:
 
