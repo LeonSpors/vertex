@@ -1,29 +1,29 @@
 variable "environment" {
-  type = string
+  type    = string
   default = "dev"
 }
 variable "kubeconfig_path" {
-  type = string
+  type    = string
   default = "~/.kube/config"
 }
 variable "namespace" {
-  type = string
+  type    = string
   default = "vertex"
 }
 variable "api_image" {
-  type = string
+  type    = string
   default = "ghcr.io/vertex/vertex-api:latest"
 }
 variable "frontend_image" {
-  type = string
+  type    = string
   default = "ghcr.io/vertex/vertex-frontend:latest"
 }
 variable "domain" {
-  type = string
+  type    = string
   default = "vertex.local"
 }
 variable "jwt_key" {
-  type = string
+  type      = string
   sensitive = true
 }
 variable "postgres_password" {
