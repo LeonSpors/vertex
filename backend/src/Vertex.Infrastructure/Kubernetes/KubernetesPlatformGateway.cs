@@ -122,7 +122,25 @@ public sealed class KubernetesPlatformGateway : IPlatformGateway
                     Metadata = new V1ObjectMeta { Labels = labels },
                     Spec = new V1PodSpec
                     {
-                    Containers = new List<V1Container> { new() { Name = deployment.Name, Image = deployment.Image, Ports = new List<V1ContainerPort> { new() { ContainerPort = deployment.Port } }, ReadinessProbe = new V1Probe { HttpGet = new V1HTTPGetAction { Path = "/health/ready", Port = (IntOrString)deployment.Port }, InitialDelaySeconds = 10, PeriodSeconds = 10 }, LivenessProbe = new V1Probe { HttpGet = new V1HTTPGetAction { Path = "/health/live", Port = (IntOrString)deployment.Port }, InitialDelaySeconds = 20, PeriodSeconds = 20 } } }
+                    SecurityContext = new V1PodSecurityContext
+                    {
+                        RunAsNonRoot = true,
+                        SeccompProfile = new V1SeccompProfile { Type = "RuntimeDefault" }
+                    },
+                    Containers = new List<V1Container> { new()
+                    {
+                        Name = deployment.Name,
+                        Image = deployment.Image,
+                        Ports = new List<V1ContainerPort> { new() { ContainerPort = deployment.Port } },
+                        SecurityContext = new V1SecurityContext
+                        {
+                            AllowPrivilegeEscalation = false,
+                            ReadOnlyRootFilesystem = true,
+                            Capabilities = new V1Capabilities { Drop = new List<string> { "ALL" } }
+                        },
+                        ReadinessProbe = new V1Probe { HttpGet = new V1HTTPGetAction { Path = "/health/ready", Port = (IntOrString)deployment.Port }, InitialDelaySeconds = 10, PeriodSeconds = 10 },
+                        LivenessProbe = new V1Probe { HttpGet = new V1HTTPGetAction { Path = "/health/live", Port = (IntOrString)deployment.Port }, InitialDelaySeconds = 20, PeriodSeconds = 20 }
+                    } }
                     }
                 }
             }

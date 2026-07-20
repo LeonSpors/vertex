@@ -1,5 +1,14 @@
 resource "kubernetes_namespace" "vertex" {
-  metadata { name = var.namespace, labels = { "app.kubernetes.io/part-of" = "vertex", "vertex.dev/environment" = var.environment } }
+  metadata {
+    name = var.namespace
+    labels = {
+      "app.kubernetes.io/part-of"           = "vertex"
+      "vertex.dev/environment"              = var.environment
+      "pod-security.kubernetes.io/enforce" = "baseline"
+      "pod-security.kubernetes.io/audit"   = "restricted"
+      "pod-security.kubernetes.io/warn"    = "restricted"
+    }
+  }
 }
 
 resource "kubernetes_resource_quota" "platform" {
@@ -15,4 +24,3 @@ resource "kubernetes_limit_range" "defaults" {
     limit { type = "Container", default = { cpu = "500m", memory = "512Mi" }, default_request = { cpu = "100m", memory = "128Mi" } }
   }
 }
-
